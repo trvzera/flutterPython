@@ -1,111 +1,108 @@
-import 'package:flutter/foundation.dart';
-import '../models/pokemon.dart';
+import 'package:flutter/material.dart';
 import '../services/pokemon_service.dart';
 
 class PokemonProvider extends ChangeNotifier {
-  final PokemonService _service;
-  PokemonProvider(this._service);
-
-  final List<Pokemon> _pokemons = [];
-  List<Pokemon> get pokemons => List.unmodifiable(_pokemons);
-  Pokemon? resultado;
-  Pokemon? detalhe;
-  String? erroLista;
-  String? erroBusca;
-  String? erroDetalhe;
+  List<dynamic> pokemons = [];
+  Map<String, dynamic>? pokemonSelecionado;
+  Map<String, dynamic>? resultadoBusca;
   bool carregandoLista = false;
   bool carregandoBusca = false;
-  bool carregandoDetalhe = false;
-  bool temMais = true;
-  bool get pesquisou => _pesquisou;
-  bool _pesquisou = false;
-  int _buscaVersao = 0;
-  int _detalheVersao = 0;
+  bool carregando = false; // Estado da tela de detalhes existente.
+  bool pesquisou = false;
+  String? erroLista;
+  String? erroBusca;
+  String? erroDetalhes;
+  int _buscaAtual = 0;
+  int _detalheAtual = 0;
+  bool _disposed = false;
 
-  String _mensagem(Object erro) => erro is ApiException
-      ? erro.mensagem
-      : 'Não foi possível ler os dados. Confira o contrato JSON do Flask.';
+  void _avisar() {
+    if (!_disposed) notifyListeners();
+  }
 
-  Future<void> carregarLista({bool reiniciar = false}) async {
-    if (carregandoLista || (!temMais && !reiniciar)) return;
+  String _mensagem(Object erro) => erro.toString().replaceFirst('Exception: ', '');
+
+  Future<void> carregarPokemons() async {
+    if (carregandoLista) return;
     carregandoLista = true;
     erroLista = null;
-    if (reiniciar) {
-      _pokemons.clear();
-      temMais = true;
-    }
-    notifyListeners();
+    _avisar();
     try {
-      final novos = await _service.listar(offset: _pokemons.length);
-      _pokemons.addAll(novos);
-      temMais = novos.length == 20;
+      pokemons = await PokemonService.buscarPokemons();
     } catch (erro) {
       erroLista = _mensagem(erro);
     } finally {
       carregandoLista = false;
-      notifyListeners();
+      _avisar();
     }
   }
 
-  Future<void> pesquisar(String texto) async {
-    final termo = texto.trim().toLowerCase();
+  Future<void> pesquisar(String nome) async {
+    final termo = nome.trim();
     if (termo.isEmpty) {
       limparPesquisa();
       return;
     }
-    await _buscar(() {
+    await _buscar(() async {
       final id = int.tryParse(termo);
-      return id != null ? _service.buscarPorId(id) : _service.buscarPorNome(termo);
+      if (id != null) return PokemonService.buscarDetalhes(id);
+      return PokemonService.buscarPorNome(termo);
     });
   }
 
-  Future<void> sortear() => _buscar(_service.aleatorio);
+  Future<void> buscarAleatorio() => _buscar(PokemonService.buscarAleatorio);
 
-  Future<void> _buscar(Future<Pokemon> Function() consulta) async {
-    final versao = ++_buscaVersao;
-    _pesquisou = true;
-    carregandoBusca = true;
-    resultado = null;
+  Future<void> _buscar(Future<Map<String, dynamic>> Function() consulta) async {
+    final atual = ++_buscaAtual;
+    pesquisou = true;
+    resultadoBusca = null;
     erroBusca = null;
-    notifyListeners();
+    carregandoBusca = true;
+    _avisar();
     try {
-      final pokemon = await consulta();
-      if (versao == _buscaVersao) resultado = pokemon;
+      final resultado = await consulta();
+      if (atual == _buscaAtual) resultadoBusca = resultado;
     } catch (erro) {
-      if (versao == _buscaVersao) erroBusca = _mensagem(erro);
+      if (atual == _buscaAtual) erroBusca = _mensagem(erro);
     } finally {
-      if (versao == _buscaVersao) {
+      if (atual == _buscaAtual) {
         carregandoBusca = false;
-        notifyListeners();
+        _avisar();
       }
     }
   }
 
   void limparPesquisa() {
-    _buscaVersao++;
-    _pesquisou = false;
+    _buscaAtual++;
+    pesquisou = false;
+    resultadoBusca = null;
     carregandoBusca = false;
-    resultado = null;
     erroBusca = null;
-    notifyListeners();
+    _avisar();
   }
 
-  Future<void> carregarDetalhe(int id) async {
-    final versao = ++_detalheVersao;
-    carregandoDetalhe = true;
-    detalhe = null;
-    erroDetalhe = null;
-    notifyListeners();
+  Future<void> carregarDetalhes(int id) async {
+    final atual = ++_detalheAtual;
+    carregando = true;
+    erroDetalhes = null;
+    pokemonSelecionado = null;
+    _avisar();
     try {
-      final pokemon = await _service.buscarPorId(id);
-      if (versao == _detalheVersao) detalhe = pokemon;
+      final detalhes = await PokemonService.buscarDetalhes(id);
+      if (atual == _detalheAtual) pokemonSelecionado = detalhes;
     } catch (erro) {
-      if (versao == _detalheVersao) erroDetalhe = _mensagem(erro);
+      if (atual == _detalheAtual) erroDetalhes = _mensagem(erro);
     } finally {
-      if (versao == _detalheVersao) {
-        carregandoDetalhe = false;
-        notifyListeners();
+      if (atual == _detalheAtual) {
+        carregando = false;
+        _avisar();
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

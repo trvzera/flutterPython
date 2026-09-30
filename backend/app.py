@@ -54,6 +54,11 @@ def converter(dados):
         'experiencia': dados.get('base_experience') or 0,
         'habilidades': [item['ability']['name'] for item in dados['abilities']],
         'atributos': {item['stat']['name']: item['base_stat'] for item in dados['stats']},
+        'hp': next((s['base_stat'] for s in dados['stats'] if s['stat']['name'] == 'hp'), 0),
+        'ataque': next((s['base_stat'] for s in dados['stats'] if s['stat']['name'] == 'attack'), 0),
+        'defesa': next((s['base_stat'] for s in dados['stats'] if s['stat']['name'] == 'defense'), 0),
+        'velocidade': next((s['base_stat'] for s in dados['stats'] if s['stat']['name'] == 'speed'), 0),
+        'ataque_especial': next((s['base_stat'] for s in dados['stats'] if s['stat']['name'] == 'special-attack'), 0),
     }
 
 
@@ -64,7 +69,7 @@ def obter_pokemon(identificador):
 @app.get('/pokemons')
 def listar():
     try:
-        limit = int(request.args.get('limit', 20))
+        limit = int(request.args.get('limit', 30))
         offset = int(request.args.get('offset', 0))
     except ValueError as error:
         raise ApiError('limit e offset devem ser números inteiros.', 400) from error
@@ -75,7 +80,7 @@ def listar():
     # Requisições em paralelo, com cache, para não buscar 20 detalhes em sequência.
     with ThreadPoolExecutor(max_workers=8) as pool:
         pokemons = list(pool.map(obter_pokemon, nomes))
-    return jsonify({'pokemons': pokemons, 'total': pagina['count']})
+    return jsonify(pokemons)
 
 
 @app.get('/pokemons/nome/<nome>')
@@ -88,11 +93,13 @@ def buscar_nome(nome):
 
 @app.get('/pokemons/aleatorio')
 def aleatorio():
-    # Sorteia qualquer espécie listada, inclusive IDs não sequenciais de formas.
-    lista = consultar('pokemon?limit=100000&offset=0')['results']
-    if not lista:
+    # Escolhe um índice da lista atual sem baixar o catálogo inteiro.
+    total = consultar('pokemon?limit=1&offset=0')['count']
+    if total < 1:
         raise ApiError('Nenhum Pokémon disponível para sorteio.', 502)
-    return jsonify(obter_pokemon(random.choice(lista)['name']))
+    indice = random.randrange(total)
+    lista = consultar(f'pokemon?limit=1&offset={indice}')['results']
+    return jsonify(obter_pokemon(lista[0]['name']))
 
 
 @app.get('/pokemons/<int:pokemon_id>')
@@ -103,4 +110,4 @@ def buscar_id(pokemon_id):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5001, debug=False)

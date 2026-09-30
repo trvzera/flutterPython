@@ -1,35 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:device_preview/device_preview.dart';
 import 'package:provider/provider.dart';
+
+import 'pages/tela_pokemon.dart';
 import 'providers/pokemon_provider.dart';
-import 'services/pokemon_service.dart';
-import 'screens/home_screen.dart';
 
 void main() {
-  runApp(ChangeNotifierProvider(
-    create: (_) => PokemonProvider(PokemonService())..carregarLista(),
-    child: const PokedexApp(),
-  ));
+  runApp(
+    DevicePreview(
+      enabled: !kReleaseMode,
+      builder: (context) => ChangeNotifierProvider(
+        create: (context) => PokemonProvider(),
+        child: const MeuApp(),
+      ),
+    ),
+  );
 }
 
-class PokedexApp extends StatelessWidget {
-  const PokedexApp({super.key});
+class MeuApp extends StatelessWidget {
+  const MeuApp({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pokédex',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE53935)),
-        scaffoldBackgroundColor: const Color(0xFFF5F6FA),
-        inputDecorationTheme: const InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(),
-        ),
-      ),
-      home: const HomeScreen(),
+      useInheritedMediaQuery: true,
+      locale: DevicePreview.locale(context),
+      builder: DevicePreview.appBuilder,
+      home: const TelaPokemon(),
     );
   }
 }

@@ -1,64 +1,48 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../models/pokemon.dart';
 
-class ApiException implements Exception {
-  final String mensagem;
-  const ApiException(this.mensagem);
-  @override
-  String toString() => mensagem;
-}
-
-// Todas as requisições de dados ficam aqui e usam somente o Flask.
 class PokemonService {
-  static const baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:5000',
+  // Informe o IP do computador ao executar em um aparelho físico.
+  static const String _base = String.fromEnvironment(
+    'API_BASE_URL', defaultValue: 'http://127.0.0.1:5001',
   );
 
-  Future<dynamic> _get(String caminho, [Map<String, String>? parametros]) async {
-    final base = baseUrl.replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$base$caminho').replace(queryParameters: parametros);
+  static Future<dynamic> _get(String path) async {
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 60));
-      if (response.statusCode == 404) {
-        throw const ApiException('Pokémon não encontrado. Confira o nome ou ID.');
+      final uri = Uri.parse('${_base.replaceAll(RegExp(r'/+$'), '')}$path');
+      final resposta = await http.get(uri).timeout(const Duration(seconds: 60));
+      if (resposta.statusCode == 404) {
+        throw Exception('Pokémon não encontrado. Confira o nome ou ID.');
       }
-      if (response.statusCode != 200) {
-        throw ApiException('O servidor retornou o erro ${response.statusCode}. Tente novamente.');
+      if (resposta.statusCode != 200) {
+        throw Exception('Erro ${resposta.statusCode} ao consultar o servidor.');
       }
-      return jsonDecode(utf8.decode(response.bodyBytes));
+      return jsonDecode(utf8.decode(resposta.bodyBytes));
     } on TimeoutException {
-      throw const ApiException('O servidor demorou para responder. Tente novamente.');
+      throw Exception('O servidor demorou para responder.');
     } on http.ClientException {
-      throw const ApiException('Não foi possível conectar ao Flask. Confira o endereço e se o servidor está ligado.');
+      throw Exception('Não foi possível conectar ao Flask em $_base.');
     } on FormatException {
-      throw const ApiException('O servidor retornou uma resposta inválida.');
+      throw Exception('Resposta inválida do Flask.');
     }
   }
 
-  Future<List<Pokemon>> listar({int limit = 20, int offset = 0}) async {
-    final json = await _get('/pokemons', {'limit': '$limit', 'offset': '$offset'});
-    // A API fornecida retorna {pokemons: [...], total: ...}.
-    final List<dynamic> lista = json is List
-        ? json
-        : (json as Map<String, dynamic>)['pokemons'] as List<dynamic>;
-    return lista.map((item) => Pokemon.fromJson(item as Map<String, dynamic>)).toList();
+  static Future<List<dynamic>> buscarPokemons() async {
+    final dados = await _get('/pokemons');
+    return dados as List<dynamic>;
   }
 
-  Future<Pokemon> buscarPorNome(String nome) async {
-    final json = await _get('/pokemons/nome/${Uri.encodeComponent(nome.trim().toLowerCase())}');
-    return Pokemon.fromJson(json as Map<String, dynamic>);
+  static Future<Map<String, dynamic>> buscarDetalhes(int id) async {
+    return (await _get('/pokemons/$id')) as Map<String, dynamic>;
   }
 
-  Future<Pokemon> buscarPorId(int id) async {
-    final json = await _get('/pokemons/$id');
-    return Pokemon.fromJson(json as Map<String, dynamic>);
+  static Future<Map<String, dynamic>> buscarPorNome(String nome) async {
+    return (await _get('/pokemons/nome/${Uri.encodeComponent(nome.trim().toLowerCase())}'))
+        as Map<String, dynamic>;
   }
 
-  Future<Pokemon> aleatorio() async {
-    final json = await _get('/pokemons/aleatorio');
-    return Pokemon.fromJson(json as Map<String, dynamic>);
+  static Future<Map<String, dynamic>> buscarAleatorio() async {
+    return (await _get('/pokemons/aleatorio')) as Map<String, dynamic>;
   }
 }
